@@ -1,8 +1,13 @@
 # Installation Guide
 
 - [Key Points](#key-points)
+- [Assumptions](#assumptions)
 - [Prerequisites](#prerequisites)
+- [0. Prepare installer](#0-prepare-installer)
+- [1. Prepare install environment](#1-prepare-install-environment)
+- [2. Partition disk](#2-partition-disk)
 - [References](#references)
+
 ## Key Points
 
 - BTRFS
@@ -11,12 +16,96 @@
 - Hibernation
 - 
 ## Assumptions
-- Installing on [Framework Laptop 13](https://frame.work/products/laptop13-diy-intel-ultra-1)
-- Using ethernet during installiation
 
-## Prerequisites 
+- Installing on [Framework Laptop 13](https://frame.work/products/laptop13-diy-intel-ultra-1)
+- Using ethernet during installation
+- Hardware SSD encryption doesn't work yet: [Issues enabling BitLocker hardware encryption](https://community.frame.work/t/issues-enabling-bitlocker-hardware-encryption-windows-encrypted-hard-drive-on-amd-7840/39415/66)
+
+## Prerequisites
+
+## 0. Prepare installer
+
+_NOTE: If using PXE boot, prepare network bootloaders (e.g. netboot.xyz, iventoy, etc).__
+
+1. Download Arch Linux image: https://archlinux.org/download/
+
+2. Write downloaded image to USB drive (e.g. [balenaEtcher](https://etcher.balena.io/), [Ventoy](https://www.dwarmstrong.org/ventoy))
+
+3. Boot target (Framework) laptop, and disable `Enforce secure boot` in BIOS.
+
+4. Boot from installer (either USB drive, or PXE Boot - Arch Linux Installer).
+
+NOTE: If no ethernet available, `iwctl` [can be used](https://wiki.archlinux.org/title/Network_configuration/Wireless) to establish wifi connection.
+
+5. (Optional) Enable SSH to login to the target system from another laptop and be able to copy paste commands easily.
+```
+# systemctl start sshd.service
+```
+
+6. Set root password
+```
+# passwd
+```
+
+7. Find out assigned ip address
+```
+# ip a
+```
+
+8. Login to the target laptop from other device, as root
+```
+# ssh root@ip.address.obtained.above
+```
+
+## 1. Prepare install environment
+
+1. Update system clock, and sync it to the hardware clock
+```
+# timedatectl list-timezones | grep London
+# ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime
+# timedatectl set-ntp true
+# timedatectl status
+# date
+# hwclock --systohc
+```
+
+2. Check mirror list, and select ones that make sense for you
+```
+# vim /etc/pacman.d/mirrorlist
+```
+
+3. Sync package database
+```
+# pacman -Sy
+```
+
+4. (Optional) Setup keyboard layout
+```
+# localectl list-keymaps | grep us
+# loadkeys us
+```
+
+5. (Optional) Increase font size for high resolution monitors
+```
+# setfont ter-v24n
+```
+NOTE: Alternative fonts are available in `/usr/share/kbd/consolefonts`.
+
+6. Check that we are in UEFI mode
+```
+# cat /sys/firmware/efi/fw_platform_size
+```
+or
+```
+# ls /sys/firmware/efi/efivars
+```
+
+## 2. Partition disk
+
+
 
 ## References
+- Arch Linux Installation guide https://wiki.archlinux.org/title/Installation_guide
 - A(rch) to Z(ram): Install Arch Linux with (almost) full disk encryption and BTRFS https://www.dwarmstrong.org/archlinux-install/
 - BTRFS snapshots and system rollbacks on Arch Linux https://www.dwarmstrong.org/btrfs-snapshots-rollbacks/
 - Create a USB stick with multiple Linux install images using Ventoy https://www.dwarmstrong.org/ventoy/
