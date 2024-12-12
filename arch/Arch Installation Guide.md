@@ -1,4 +1,4 @@
-# Installation Guide
+# Arch Installation Guide
 
 - [Key Points](#key-points)
 - [Assumptions](#assumptions)
