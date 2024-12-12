@@ -102,6 +102,56 @@ or
 
 ## 2. Partition disk
 
+Check disks:
+
+```
+# lsblk
+```
+
+1. Clean previous installation
+```
+# wipefs -af /dev/nvme0n1
+# sgdisk --zap-all --clear /dev/nvme0n1
+# partprobe /dev/nvme0n1
+```
+
+2. Fill disk with random data
+- Create a temporary crypt device (e.g. "target")
+```
+# cryptsetup open --type plain -d /dev/urandom /dev/nvme0n1 target
+```
+- Fill the container with a stream of zeros using "dd":
+```
+# dd if=/dev/zero of=/dev/mapper/target bs=1M status=progress oflag=direct
+```
+- Remove the mapping
+```
+# cryptsetup close target
+```
+
+3. Partition disk
+
+Use `sgdisk` to create partitions
+
+- List partition type codes
+```
+# sgdisk --list-types
+```
+
+- Partition 1 - EFI partition (ESP) - size `512MiB`, code `ef00`
+- Partition 2 - encrypted partition (LUKS) - remaining storage, code `8309`
+- `-50G` # leaving 50GB at the end for the SSD to work with
+```
+# sgdisk -n 0:0:+512MiB -t 0:ef00 -c 0:esp /dev/nvme0n1
+# sgdisk -n 0:0:-50GiB -t 0:8309 -c 0:luks /dev/nvme0n1
+# partprobe /dev/nvme0n1
+```
+
+Check the new partition table
+```
+# sgdisk -p /dev/nvme0n1
+```
+
 
 
 ## References
@@ -124,4 +174,7 @@ or
 - Changing a LUKS Passphrase https://www.baeldung.com/linux/luks-change-passphrase
 - Self-encrypting drives https://wiki.archlinux.org/title/Self-encrypting_drives
 - Cryptsetup 2.7.0 Release Notes https://mirrors.edge.kernel.org/pub/linux/utils/cryptsetup/v2.7/v2.7.0-ReleaseNotes
+- dm-crypt/Drive preparation https://wiki.archlinux.org/title/Dm-crypt/Drive_preparation
+- Cryptsetup https://gitlab.com/cryptsetup/cryptsetup/-/wikis/FrequentlyAskedQuestions#2-setup
+- Managing Partitions with sgdisk https://fedoramagazine.org/managing-partitions-with-sgdisk/
 - 
