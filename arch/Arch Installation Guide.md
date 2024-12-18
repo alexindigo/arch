@@ -290,10 +290,120 @@ Recommended options for SSD/NVME:
 
 ** - _For AMD use `amd-ucode` microcode package, instead of `intel-ucode` used for intel._
 
+> if you want to continue setting up laptop by sshing into it, add `openssh` to the list.
+
 ```
-# pacstrap /mnt base base-devel intel-ucode btrfs-progs linux linux-firmware bash-completion cryptsetup htop man-db mlocate neovim networkmanager openssh pacman-contrib pkgfile reflector sudo terminus-font tmux
---
-# pacstrap /mnt base linux linux-firmware git vim intel-ucode btrfs-progs
+# pacstrap /mnt base intel-ucode btrfs-progs linux linux-firmware git vim sudo
+```
+
+2. Update file system table
+
+```
+# genfstab -U -p /mnt >> /mnt/etc/fstab
+```
+
+3. Chroot into the base system to configure
+
+```
+# arch-chroot /mnt /bin/bash
+```
+
+4. Timezone
+
+Set desired timezone and update the system clock
+
+```
+# ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime
+# hwclock --systohc
+```
+
+5. Hostname
+
+** – _`framework` is example laptop name_
+
+```
+# echo "framework" > /etc/hostname
+```
+
+- Add matching entries to `/etc/hosts`
+
+```
+# cat > /etc/hosts <<EOF
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   framework.localdomain framework
+EOF
+```
+
+** - Details on `.localdomain`: https://bbs.archlinux.org/viewtopic.php?id=156064
+
+7. Locale
+
+Set `en_US.UTF-8` locale
+
+```
+# export locale="en_US.UTF-8"
+# sed -i "s/^#\(${locale}\)/\1/" /etc/locale.gen
+# echo "LANG=${locale}" > /etc/locale.conf
+# locale-gen
+```
+
+- (Optional) if needed set key mapping for non-US locales/keyboards
+_Details: https://man.archlinux.org/man/vconsole.conf.5
+
+```
+# echo "KEYMAP=us" >> /etc/vconsole.conf
+```
+
+8. Root password
+
+```
+# passwd
+```
+
+9. Add first (admin) user
+
+- Create a user account, `alex` is example user name
+
+```
+# useradd -m -G wheel -s /bin/bash alex
+# passwd alex
+```
+
+- Enable `wheel` group access for `sudo`
+
+```
+# sed -i "s/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/" /etc/sudoers
+```
+
+## Setup boot
+
+```
+# pacman -Syu grub efibootmgr mtools dosfstools base-devel linux-headers
+```
+
+- Get UUID of boot device and append it to end of file for cutting and pasting:
+
+```
+# blkid
+# blkid | grep n1p2 | cut -d\" -f 2
+# blkid | grep n1p2 | cut -d\" -f 2 >> /etc/default/grub
+# vim /etc/default/grub
+```
+
+- Edit `GRUB_CMDLINE_LINUX_DEFAULT` to look like this; you can cut the UUID from the end of the file by pressing `v` to go into visual mode, moving cursor to the end, and then pressing `d` to cut. Later you can paste it with the `p` command.
+
+```
+"loglevel=3 quiet acpi_osi=\"Windows 2020\" mem_sleep_default=deep cryptdevice=UUID=PASTED-UUID:crypt:allow-discards root=/dev/mapper/crypt"
+```
+
+
+
+## Temporary
+
+Install further down the line, maybe
+```
+# base-devel bash-completion cryptsetup htop man-db mlocate neovim networkmanager openssh pacman-contrib pkgfile reflector terminus-font tmux
 ```
 
 ## References
@@ -323,4 +433,6 @@ Recommended options for SSD/NVME:
 - `man mount` https://www.man7.org/linux/man-pages/man8/mount.8.html
 - What BTRFS subvolume mount options should I use ? https://www.reddit.com/r/btrfs/comments/shihry/what_btrfs_subvolume_mount_options_should_i_use/
 - btrfs(5) man https://btrfs.readthedocs.io/en/latest/btrfs-man5.html
+- `.localdomain` https://bbs.archlinux.org/viewtopic.php?id=156064
+- `Re: localhost.localdomain` https://lists.debian.org/debian-devel/2005/10/msg00559.html
 - 
