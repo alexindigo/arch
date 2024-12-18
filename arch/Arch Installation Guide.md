@@ -6,6 +6,10 @@
 - [0. Prepare installer](#0-prepare-installer)
 - [1. Prepare install environment](#1-prepare-install-environment)
 - [2. Partition disk](#2-partition-disk)
+- [3. Disk Encryption](#3-disk-encryption)
+- [4. Format partitions](#4-format-partitions)
+- [5. Mount volumes](#5-mount-volumes)
+- [6. Install Arch](#6-install-arch)
 - [References](#references)
 
 ## Key Points
@@ -23,9 +27,11 @@
 
 ## Prerequisites
 
+...
+
 ## 0. Prepare installer
 
-_NOTE: If using PXE boot, prepare network bootloaders (e.g. netboot.xyz, iventoy, etc).__
+_NOTE: If using PXE boot, prepare network bootloaders (e.g. netboot.xyz, iventoy, etc)._
 
 1. Download Arch Linux image: https://archlinux.org/download/
 
@@ -138,11 +144,11 @@ Use `sgdisk` to create partitions
 # sgdisk --list-types
 ```
 
-- Partition 1 - EFI partition (ESP) - size `512MiB`, code `ef00`
+- Partition 1 - EFI partition - size `1GiB`, code `ef00`
 - Partition 2 - encrypted partition (LUKS) - remaining storage, code `8309`
 - `-50G` # leaving 50GB at the end for the SSD to work with
 ```
-# sgdisk -n 0:0:+512MiB -t 0:ef00 -c 0:esp /dev/nvme0n1
+# sgdisk -n 0:0:+1GiB -t 0:ef00 -c 0:esp /dev/nvme0n1
 # sgdisk -n 0:0:-50GiB -t 0:8309 -c 0:luks /dev/nvme0n1
 # partprobe /dev/nvme0n1
 ```
@@ -152,7 +158,143 @@ Check the new partition table
 # sgdisk -p /dev/nvme0n1
 ```
 
+## 3. Disk Encryption
 
+1. Create LUKS encrypted container. **You will need to create and enter (twice) encryption passphrase**
+```
+# cryptsetup -v -y luksFormat /dev/nvme0n1p2
+```
+
+2. Open created container
+```
+# cryptsetup luksOpen /dev/nvme0n1p2 crypt
+```
+** – `crypt` is the name of the encrypted container after opening it. The decrypted container is now available at `/dev/mapper/crypt`.
+
+## 4. Format partitions
+
+1. Format EFI (boot) partition
+```
+# mkfs.vfat -F32 -n EFI /dev/nvme0n1p1
+```
+** – `EFI` is the partition name
+
+2. Format encrypted partition
+```
+# mkfs.btrfs -L CRYPT /dev/mapper/crypt
+```
+** – `CRYPT` is the filesystem label
+
+3. Mount root filesystem to create subvolumes
+```
+# mount /dev/mapper/crypt /mnt
+```
+
+4. Create BTRFS subvolumes
+
+Separate data (for backup/restore purposes) into individual subvolumes.
+
+ - Create "top level" subvolume (make it easier to change subvolumes in the future by using separate `@` subvolume as root `/`)
+
+```
+# btrfs subvolume create /mnt/@
+```
+
+- Create swap subvolume
+```
+# btrfs subvolume create /mnt/@swap
+```
+
+- Create rest of subvolumes (pick ones matching your needs) for the following mount points:
+- `@cache`: `/var/cache`
+- `@home`: `/home`
+- `@log`: `/var/log`
+- `@snapshots`: `/.snapshots`
+- `@tmp`: `/var/tmp`
+- `@vms`: `/var/lib/libvirt`
+
+```
+# btrfs subvolume create /mnt/@cache
+# btrfs subvolume create /mnt/@home
+# btrfs subvolume create /mnt/@log
+# btrfs subvolume create /mnt/@snapshots
+# btrfs subvolume create /mnt/@tmp
+# btrfs subvolume create /mnt/@vms
+```
+
+5. Unmount root filesystem, to re-mount all subvolumes to the right places
+```
+# umount /mnt
+```
+
+## 5. Mount volumes
+
+1. Prepare shared mount options:
+
+Recommended options for SSD/NVME:
+> `noatime` – don't write access time for files;
+> `compress-force=zstd:1` – less compression for higher speed;
+> `space_cache=v2` – in memory cache;
+
+```
+# export sv_opts="rw,noatime,compress-force=zstd:1,space_cache=v2"
+```
+
+2. Mount the root subvolume `@`, so we can mount all other subvolumes under this root volume
+```
+# mount -o ${sv_opts},subvol=@ /dev/mapper/crypt /mnt
+```
+
+3. Mount boot partition
+```
+# mkdir -p /mnt/boot
+# mount /dev/nvme0n1p1 /mnt/boot
+```
+
+4. Create mount points for the the rest of subvolumes, including `swap` 
+```
+# mkdir -p /mnt/{.snapshots,home,swap,var/cache,var/lib/libvirt,var/log,var/tmp}
+```
+
+5. Mount subvolumes
+```
+# mount -o ${sv_opts},subvol=@snapshots /dev/mapper/crypt /mnt/.snapshots
+# mount -o ${sv_opts},subvol=@home /dev/mapper/crypt /mnt/home
+# mount -o ${sv_opts},subvol=@swap /dev/mapper/crypt /mnt/swap
+# mount -o ${sv_opts},subvol=@cache /dev/mapper/crypt /mnt/var/cache
+# mount -o ${sv_opts},subvol=@vms /dev/mapper/crypt /mnt/var/lib/libvirt
+# mount -o ${sv_opts},subvol=@log /dev/mapper/crypt /mnt/var/log
+# mount -o ${sv_opts},subvol=@tmp /dev/mapper/crypt /mnt/var/tmp
+```
+
+6. Check new structure
+```
+# lsblk
+```
+
+## 6. Install Arch
+
+0. Set package mirrors
+
+- Synchronize package databases
+```
+# pacman -Syy
+```
+
+- Generate mirror list (top 5 by speed in US/Canada)
+```
+# reflector --verbose --protocol https --latest 5 --sort rate --country US --country Canada --save /etc/pacman.d/mirrorlist
+```
+
+1. Install base system
+
+** - _For AMD use `amd-ucode` microcode package, instead of `intel-ucode` used for intel._
+
+```
+# pacstrap /mnt base base-devel intel-ucode btrfs-progs linux linux-firmware bash-completion cryptsetup htop man-db mlocate neovim networkmanager openssh pacman-contrib pkgfile reflector sudo terminus-font tmux
+--
+# pacstrap /mnt base linux linux-firmware git vim intel-ucode btrfs-progs
+```
 
 ## References
 - Arch Linux Installation guide https://wiki.archlinux.org/title/Installation_guide
@@ -177,4 +319,8 @@ Check the new partition table
 - dm-crypt/Drive preparation https://wiki.archlinux.org/title/Dm-crypt/Drive_preparation
 - Cryptsetup https://gitlab.com/cryptsetup/cryptsetup/-/wikis/FrequentlyAskedQuestions#2-setup
 - Managing Partitions with sgdisk https://fedoramagazine.org/managing-partitions-with-sgdisk/
+- Snapper - backup (snapshots) tool https://wiki.archlinux.org/title/Snapper
+- `man mount` https://www.man7.org/linux/man-pages/man8/mount.8.html
+- What BTRFS subvolume mount options should I use ? https://www.reddit.com/r/btrfs/comments/shihry/what_btrfs_subvolume_mount_options_should_i_use/
+- btrfs(5) man https://btrfs.readthedocs.io/en/latest/btrfs-man5.html
 - 
