@@ -378,16 +378,33 @@ _Details: https://man.archlinux.org/man/vconsole.conf.5
 
 ## Setup boot
 
+0. Install dependencies
 ```
 # pacman -Syu grub efibootmgr mtools dosfstools base-devel linux-headers
 ```
+
+1.  Install GRUB
+```
+# grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+```
+
+- Verify that a GRUB entry has been added to the UEFI bootloader:
+```
+# efibootmgr
+```
+
+2. Prepare GRUB config template
 
 - Get UUID of boot device and append it to end of file for cutting and pasting:
 
 ```
 # blkid
-# blkid | grep n1p2 | cut -d\" -f 2
-# blkid | grep n1p2 | cut -d\" -f 2 >> /etc/default/grub
+
+# blkid -s UUID -o value /dev/nvme0n1p2 >> /etc/default/grub
+
+
+# # ^ if that works, no need # blkid | grep n1p2 | cut -d\" -f 2
+# # ^ if that works, no need # blkid | grep n1p2 | cut -d\" -f 2 >> /etc/default/grub
 # vim /etc/default/grub
 ```
 
@@ -397,7 +414,59 @@ _Details: https://man.archlinux.org/man/vconsole.conf.5
 "loglevel=3 quiet acpi_osi=\"Windows 2020\" mem_sleep_default=deep cryptdevice=UUID=PASTED-UUID:crypt:allow-discards root=/dev/mapper/crypt"
 ```
 
+3. Set up GRUB config
+```
+# grub-mkconfig -o /boot/grub/grub.cfg
+```
 
+4. Set up boot image
+
+- Set `MODULES` and `HOOKS` in `/etc/mkinitcpio.conf`:
+```
+# vim /etc/mkinitcpio.conf
+```
+
+- `MODULES`
+```
+MODULES=(btrfs)
+```
+
+- `HOOKS`
+```
+HOOKS=(base udev keyboard autodetect keymap consolefont modconf block encrypt filesystems fsck)
+```
+
+Hook ordering:
+
+| Hook             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `base`           | Sets up all initial directories and installs base utilities and libraries. Always keep this hook as the first hook unless you know what you are doing, as it provides critical busybox init when not using **systemd** hook.                                                                                                                                                                                                                                                                                                     |
+| `udev`           | Starts the udev daemon and processes uevents from the kernel; creating device nodes. As it simplifies the boot process by not requiring the user to explicitly specify necessary modules, using it is recommended.                                                                                                                                                                                                                                                                                                               |
+| `keyboard`       | Adds the necessary modules for keyboard devices. Use this if you have a USB or serial keyboard and need it in early userspace (either for entering encryption passphrases or for use in an interactive shell). For systems that are booted with different hardware configurations (e.g. laptops with external keyboard vs. internal keyboard), **this hook needs to be placed before autodetect** in order to be able to use the keyboard at boot time, for example to unlock an encrypted device when using the `encrypt` hook. |
+| **`autodetect`** | Shrinks your initramfs to a smaller size by creating a whitelist of modules from a scan of sysfs. Be sure to verify included modules are correct and none are missing. This hook must be run before other subsystem hooks in order to take advantage of auto-detection. Any hooks placed before 'autodetect' will be installed in full.                                                                                                                                                                                          |
+| `keymap`         | Adds the specified console keymap(s) from `/etc/vconsole.conf` to the initramfs. If you use system encryption, **especially full-disk encryption, make sure you add it before the `encrypt` hook**.                                                                                                                                                                                                                                                                                                                              |
+| `consolefont`    | Adds the specified console font from `/etc/vconsole.conf` to the initramfs.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `modconf`        | Includes modprobe configuration files from `/etc/modprobe.d/` and `/usr/lib/modprobe.d/`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `block`          | Adds block device modules. If the `autodetect` hook runs before this hook, it will only add modules for block devices used on the system.                                                                                                                                                                                                                                                                                                                                                                                        |
+| `encrypt`        | Adds the `dm_crypt` kernel module and the `cryptsetup` tool to the image. At runtime detects and unlocks an encrypted root partition. This must be placed **before** `filesystems`                                                                                                                                                                                                                                                                                                                                               |
+| `filesystems`    | This includes necessary file system modules into your image. This hook is required unless you specify your file system modules in `MODULES`.                                                                                                                                                                                                                                                                                                                                                                                     |
+| `fsck`           | Adds the fsck binary and file system-specific helpers to allow running fsck against your root device (and `/usr` if separate) prior to mounting. If added after the **autodetect** hook, only the helper specific to your root file system will be added. Usage of this hook is **strongly** recommended.                                                                                                                                                                                                                        |
+
+- Recreate the initramfs image [for `linux` preset](https://wiki.archlinux.org/title/Mkinitcpio#Manual_generation)
+```
+# mkinitcpio -p linux
+```
+
+## Reboot
+
+- Exit chroot and reboot
+```
+# exit
+# umount -R /mnt
+# reboot
+```
+
+- Remove the USB stick. Type the LUKS password when prompted. Log in with your user created above.
 
 ## Temporary
 
@@ -435,4 +504,4 @@ Install further down the line, maybe
 - btrfs(5) man https://btrfs.readthedocs.io/en/latest/btrfs-man5.html
 - `.localdomain` https://bbs.archlinux.org/viewtopic.php?id=156064
 - `Re: localhost.localdomain` https://lists.debian.org/debian-devel/2005/10/msg00559.html
-- 
+- Mkinitcpio > Common hooks: https://wiki.archlinux.org/title/Mkinitcpio#Common_hooks
