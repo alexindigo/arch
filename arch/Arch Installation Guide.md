@@ -15,6 +15,9 @@
 - [9. After first boot](#9-after-first-boot)
 - [10. Encrypted Swap](#10-encrypted-swap)
 - [11. Hibernation](#11-hibernation)
+- [12. Linux LTS kernel](#12-linux-lts-kernel)
+- [13. Tuning](#13-tuning)
+- [14. Snapshots](#14-snapshots)
 - [References](#references)
 
 ## Key Points
@@ -587,7 +590,7 @@ $ sudo vim /etc/default/grub
 ```
 making it look like:
 ```
-GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet acpi_osi=\"Windows 2020\" mem_sleep_default=deep cryptdevice=UUID=PASTED-UUID:crypt:allow-discards root=/dev/mapper/crypt resume=UUID=UUID=SWAPFILE-UUID-DIFF-FROM-CRYPTUUID resume_offset=XXXXXX"
+GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet acpi_osi=\"Windows 2020\" mem_sleep_default=deep cryptdevice=UUID=CUT-N-PASTED-UUID-FROM-BOTTOM-OF-FILE:crypt:allow-discards root=/dev/mapper/crypt resume=UUID=UUID=SWAPFILE-UUID-DIFF-FROM-CRYPTUUID resume_offset=XXXXXX"
 ```
 
 6. Recreate GRUB config
@@ -608,6 +611,85 @@ $ sudo systemctl hibernate
 9. After Boot Check
 ```
 $ uptime
+```
+
+## 12. Linux LTS kernel
+
+1. Install the Long-Term Support (LTS) Linux kernel as a fallback option to Arch's default kernel
+```
+$ sudo pacman -S linux-lts
+```
+
+2. Recreate GRUB config
+```
+$ sudo grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+3. Reboot and choose LTS kernel
+```
+$ sudo reboot
+```
+
+4. Check for LTS kernel 
+```
+$ uname -r
+```
+
+5. Reboot again and choose default (arch) kernel
+```
+$ sudo reboot
+```
+
+## 13. Tuning
+
+1. Update packages
+```
+$ sudo pacman -Syu
+```
+
+2. Tune pacman
+```
+$ sudo vim /etc/pacman.conf
+```
+add `Misc Options`
+```
+Color
+VerbosePkgLists
+ParallelDownloads=5
+```
+
+3. Tune up GRUB config
+```
+$ sudo vim /etc/default/grub
+```
+- update/uncomment:
+```
+# remember the last entry you booted from
+GRUB_DEFAULT=saved
+
+# change timeout behavior, press ESC key to display menu
+GRUB_TIMEOUT_STYLE=hidden
+
+# make text of readable size
+GRUB_GFXMODE=1024x768x32,800x600x32,auto
+
+# enable saving the selected entry
+GRUB_SAVEDEFAULT=true
+
+# disable submenus in boot menu
+GRUB_DISABLE_SUBMENU=y
+```
+-  Recreate GRUB config
+```
+$ sudo grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+## 14. Snapshots
+
+1. Install Snapper and snap-pac
+    **Snapper** is a tool for managing BTRFS snapshots. It can create and restore snapshots, and provides scheduled auto-snapping. **Snap-pac** provides a Pacman hook that uses Snapper to create `pre-` and `post-` BTRFS snapshots triggered by use of the package manager.
+```
+$ sudo pacman -S snapper snap-pac
 ```
 
 ## References
@@ -648,4 +730,9 @@ $ uptime
 - BTFS | Swapfile https://btrfs.readthedocs.io/en/latest/Swapfile.html
 - BTRFS | Swapfile for hibernation https://btrfs.readthedocs.io/en/latest/Swapfile.html#hibernation
 - Hibernation on a LUKS Encrypted btrfs https://svw.au/guides/archbtw/hibernate-luks-btrfs-arch/
+- GRUB | Multiple entries https://wiki.archlinux.org/title/GRUB/Tips_and_tricks#Multiple_entries
+- GRUB | Text size problem https://community.frame.work/t/solved-grub-text-size-problem/20036/9
+- BTRFS snapshots and system rollbacks on Arch Linux https://www.dwarmstrong.org/btrfs-snapshots-rollbacks/
+- arch-btrfs-install-guide https://github.com/Zelrin/arch-btrfs-install-guide
+- An Arch Linux Installation on a Btrfs Filesystem with Snapper for System Snapshots and Rollbacks https://www.ordinatechnic.com/distribution-specific-guides/Arch/an-arch-linux-installation-on-a-btrfs-filesystem-with-snapper-for-system-snapshots-and-rollbacks
 - 
