@@ -10,14 +10,20 @@
 - [4. Format partitions](#4-format-partitions)
 - [5. Mount volumes](#5-mount-volumes)
 - [6. Install Arch](#6-install-arch)
+- [7. Setup boot image](#7-setup-boot-image)
+- [8. Prepare for the first boot](#8-prepare-for-the-first-boot)
+- [9. After first boot](#9-after-first-boot)
+- [10. Encrypted Swap](#10-encrypted-swap)
+- [11. Hibernation](#11-hibernation)
 - [References](#references)
 
 ## Key Points
 
 - BTRFS
 - Encryption (LUKS) + encrypted swap
-- Snapshots, auto-update GRUB
 - Hibernation
+- Backup kernel
+- Snapshots, auto-update GRUB
 - 
 ## Assumptions
 
@@ -43,31 +49,36 @@ _NOTE: If using PXE boot, prepare network bootloaders (e.g. netboot.xyz, iventoy
 
 NOTE: If no ethernet available, `iwctl` [can be used](https://wiki.archlinux.org/title/Network_configuration/Wireless) to establish wifi connection.
 
-5. (Optional) Enable SSH to login to the target system from another laptop and be able to copy paste commands easily.
+5. (Optional) If no plugged in to power, check battery status
+```
+# cat /sys/class/power_supply/BAT1/capacity
+```
+
+6. (Optional) Enable SSH to login to the target system from another laptop and be able to copy paste commands easily.
 ```
 # systemctl start sshd.service
 ```
 
-6. Set root password
+7. Set root password
 ```
 # passwd
 ```
 
-7. Find out assigned ip address
+8. Find out assigned ip address
 ```
 # ip a
 ```
 
-8. Login to the target laptop from other device, as root
+9. Login to the target laptop from other device, as root
 ```
-# ssh root@ip.address.obtained.above
+$ ssh root@ip.address.obtained.above
 ```
 
 ## 1. Prepare install environment
 
 1. Update system clock, and sync it to the hardware clock
 ```
-# timedatectl list-timezones | grep London
+# timedatectl list-timezones | grep Los_Angeles
 # ln -sf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime
 # timedatectl set-ntp true
 # timedatectl status
@@ -93,7 +104,7 @@ NOTE: If no ethernet available, `iwctl` [can be used](https://wiki.archlinux.org
 
 5. (Optional) Increase font size for high resolution monitors
 ```
-# setfont ter-v24n
+# setfont ter-v28n
 ```
 NOTE: Alternative fonts are available in `/usr/share/kbd/consolefonts`.
 
@@ -105,6 +116,7 @@ or
 ```
 # ls /sys/firmware/efi/efivars
 ```
+** - If the directory does not exist, the system is booted in BIOS mode.
 
 ## 2. Partition disk
 
@@ -148,8 +160,8 @@ Use `sgdisk` to create partitions
 - Partition 2 - encrypted partition (LUKS) - remaining storage, code `8309`
 - `-50G` # leaving 50GB at the end for the SSD to work with
 ```
-# sgdisk -n 0:0:+1GiB -t 0:ef00 -c 0:esp /dev/nvme0n1
-# sgdisk -n 0:0:-50GiB -t 0:8309 -c 0:luks /dev/nvme0n1
+# sgdisk -n 0:0:+1GiB -t 0:ef00 -c 0:boot /dev/nvme0n1
+# sgdisk -n 0:0:-50GiB -t 0:8309 -c 0:vault /dev/nvme0n1
 # partprobe /dev/nvme0n1
 ```
 
@@ -376,7 +388,7 @@ _Details: https://man.archlinux.org/man/vconsole.conf.5
 # sed -i "s/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/" /etc/sudoers
 ```
 
-## Setup boot
+## 7. Setup boot image
 
 0. Install dependencies
 ```
@@ -393,25 +405,25 @@ _Details: https://man.archlinux.org/man/vconsole.conf.5
 # efibootmgr
 ```
 
+- (Optional) You may want to adjust boot order, using `efibootmgr -o`, **make sure to use correct values** from previous output.
+```
+# efibootmgr -o 0001,2001,2002,2003
+```
+
 2. Prepare GRUB config template
 
 - Get UUID of boot device and append it to end of file for cutting and pasting:
 
 ```
-# blkid
-
 # blkid -s UUID -o value /dev/nvme0n1p2 >> /etc/default/grub
 
-
-# # ^ if that works, no need # blkid | grep n1p2 | cut -d\" -f 2
-# # ^ if that works, no need # blkid | grep n1p2 | cut -d\" -f 2 >> /etc/default/grub
 # vim /etc/default/grub
 ```
 
 - Edit `GRUB_CMDLINE_LINUX_DEFAULT` to look like this; you can cut the UUID from the end of the file by pressing `v` to go into visual mode, moving cursor to the end, and then pressing `d` to cut. Later you can paste it with the `p` command.
 
 ```
-"loglevel=3 quiet acpi_osi=\"Windows 2020\" mem_sleep_default=deep cryptdevice=UUID=PASTED-UUID:crypt:allow-discards root=/dev/mapper/crypt"
+"loglevel=3 quiet acpi_osi=\"Windows 2020\" mem_sleep_default=deep cryptdevice=UUID=CUT-N-PASTED-UUID-FROM-BOTTOM-OF-FILE:crypt:allow-discards root=/dev/mapper/crypt"
 ```
 
 3. Set up GRUB config
@@ -433,7 +445,7 @@ MODULES=(btrfs)
 
 - `HOOKS`
 ```
-HOOKS=(base udev keyboard autodetect keymap consolefont modconf block encrypt filesystems fsck)
+HOOKS=(base udev keyboard autodetect microcode keymap consolefont modconf block encrypt filesystems fsck)
 ```
 
 Hook ordering:
@@ -444,6 +456,7 @@ Hook ordering:
 | `udev`           | Starts the udev daemon and processes uevents from the kernel; creating device nodes. As it simplifies the boot process by not requiring the user to explicitly specify necessary modules, using it is recommended.                                                                                                                                                                                                                                                                                                               |
 | `keyboard`       | Adds the necessary modules for keyboard devices. Use this if you have a USB or serial keyboard and need it in early userspace (either for entering encryption passphrases or for use in an interactive shell). For systems that are booted with different hardware configurations (e.g. laptops with external keyboard vs. internal keyboard), **this hook needs to be placed before autodetect** in order to be able to use the keyboard at boot time, for example to unlock an encrypted device when using the `encrypt` hook. |
 | **`autodetect`** | Shrinks your initramfs to a smaller size by creating a whitelist of modules from a scan of sysfs. Be sure to verify included modules are correct and none are missing. This hook must be run before other subsystem hooks in order to take advantage of auto-detection. Any hooks placed before 'autodetect' will be installed in full.                                                                                                                                                                                          |
+| `microcode`      | Prepends an uncompressed initramfs image with early microcode update files for Intel and AMD processors. If the autodetect hook runs before this hook, it will only add early microcode update files for the processor of the system the image is built on. This also allows you to drop the microcode `initrd` lines from your boot configuration as they are now packed together with the main initramfs image. |
 | `keymap`         | Adds the specified console keymap(s) from `/etc/vconsole.conf` to the initramfs. If you use system encryption, **especially full-disk encryption, make sure you add it before the `encrypt` hook**.                                                                                                                                                                                                                                                                                                                              |
 | `consolefont`    | Adds the specified console font from `/etc/vconsole.conf` to the initramfs.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `modconf`        | Includes modprobe configuration files from `/etc/modprobe.d/` and `/usr/lib/modprobe.d/`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -457,9 +470,26 @@ Hook ordering:
 # mkinitcpio -p linux
 ```
 
-## Reboot
+## 8. Prepare for the first boot
 
-- Exit chroot and reboot
+1. Enable auto-start FS trimmer
+
+- Periodic TRIM optimizes performance on SSD storage, enable a weekly task that discards unused blocks
+```
+# systemctl enable fstrim.timer
+```
+
+2. (Optional) Install convenience tools, to use post reboot:
+```
+# pacman -Sy man-db man-pages openssh networkmanager
+```
+
+3. (Optional) Enable auto-start for network manager if chosen above
+```
+# systemctl enable NetworkManager
+```
+
+4. Exit chroot and reboot
 ```
 # exit
 # umount -R /mnt
@@ -468,11 +498,116 @@ Hook ordering:
 
 - Remove the USB stick. Type the LUKS password when prompted. Log in with your user created above.
 
-## Temporary
+## 9. After first boot
 
-Install further down the line, maybe
+0. (Optional) you may need to connect to WIFI
 ```
-# base-devel bash-completion cryptsetup htop man-db mlocate neovim networkmanager openssh pacman-contrib pkgfile reflector terminus-font tmux
+$ sudo nmtui
+```
+
+2. (Optional) Enable SSH to continue setting up new laptop from another machine
+```
+$ sudo systemctl start sshd.service
+$ ip a
+```
+
+- SSH from another machine as newly created sudo user (e.g. `alex`)
+
+2. Check errors
+```
+$ systemctl --failed
+$ journalctl -p 3 -xb
+```
+
+- investigate the errors and continue to setting up swap
+
+## 10. Encrypted Swap
+
+1. Create swap file (making couple gigs bigger than ram size)
+```
+$ sudo btrfs filesystem mkswapfile --size 98G /swap/swapfile
+```
+
+2. Make `swapfile` into swap
+```
+$ sudo swapon /swap/swapfile
+```
+
+5. Update `fstab`
+```
+# vim /etc/fstab
+```
+Add following line:
+```
+/swap/swapfile none swap defaults 0 0
+```
+
+6. Check results
+```
+# cat /proc/swaps
+```
+
+## 11. Hibernation
+
+1. Add `resume` hook to the boot image
+```
+$ sudo vim /etc/mkinitcpio.conf
+```
+
+| Hook             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------- | -----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `resume`          | Tries to resume from the "suspend to disk" state. See [Hibernation](https://wiki.archlinux.org/title/Hibernation "Hibernation") for further configuration. |
+
+```
+HOOKS=(base udev keyboard autodetect microcode keymap consolefont modconf block encrypt filesystems resume fsck)
+```
+** - `resume` needs to follow after `filesystems`
+
+2. Rebuilt boot image
+```
+$ sudo mkinitcpio -p linux
+```
+
+3. Save resume offset
+```
+$ sudo btrfs inspect-internal map-swapfile -r /swap/swapfile
+```
+- returned value should be used as `resume_offset=XXXXXX` parameter to grub config
+
+4. Get UUID for device with swapfile
+```
+$ findmnt -no UUID -T /swap/swapfile
+```
+- returned value should be used as `resume=UUID=SWAPFILE-UUID-DIFF-FROM-CRYPTUUID` parameter to grub config
+
+5. Update bootloader
+- Add retrived UUID to `GRUB_CMDLINE_LINUX_DEFAULT` line in `/etc/default/grub`
+```
+$ sudo vim /etc/default/grub
+```
+making it look like:
+```
+GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3 quiet acpi_osi=\"Windows 2020\" mem_sleep_default=deep cryptdevice=UUID=PASTED-UUID:crypt:allow-discards root=/dev/mapper/crypt resume=UUID=UUID=SWAPFILE-UUID-DIFF-FROM-CRYPTUUID resume_offset=XXXXXX"
+```
+
+6. Recreate GRUB config
+```
+$ sudo grub-mkconfig -o /boot/grub/grub.cfg
+```
+
+7. Reboot for GRUB changes to take effect
+```
+$ sudo reboot
+```
+
+8. Test hibernation
+```
+$ sudo systemctl hibernate
+```
+
+9. After Boot Check
+```
+$ uptime
 ```
 
 ## References
@@ -500,8 +635,17 @@ Install further down the line, maybe
 - Managing Partitions with sgdisk https://fedoramagazine.org/managing-partitions-with-sgdisk/
 - Snapper - backup (snapshots) tool https://wiki.archlinux.org/title/Snapper
 - `man mount` https://www.man7.org/linux/man-pages/man8/mount.8.html
+- BTRFS docs: https://btrfs.readthedocs.io
 - What BTRFS subvolume mount options should I use ? https://www.reddit.com/r/btrfs/comments/shihry/what_btrfs_subvolume_mount_options_should_i_use/
 - btrfs(5) man https://btrfs.readthedocs.io/en/latest/btrfs-man5.html
 - `.localdomain` https://bbs.archlinux.org/viewtopic.php?id=156064
 - `Re: localhost.localdomain` https://lists.debian.org/debian-devel/2005/10/msg00559.html
 - Mkinitcpio > Common hooks: https://wiki.archlinux.org/title/Mkinitcpio#Common_hooks
+- Microcode initramfs packed together with the main initramfs in one file https://wiki.archlinux.org/title/Microcode#mkinitcpio
+- Arch Wiki | Hibernation https://wiki.archlinux.org/title/Power_management/Suspend_and_hibernate#Hibernation
+- Swap encryption with suspend-to-disk support https://wiki.archlinux.org/title/Dm-crypt/Swap_encryption#With_suspend-to-disk_support
+- How do you find the physical offset for a file in BTRFS? https://unix.stackexchange.com/questions/623859/how-do-you-find-the-physical-offset-for-a-file-in-btrfs
+- BTFS | Swapfile https://btrfs.readthedocs.io/en/latest/Swapfile.html
+- BTRFS | Swapfile for hibernation https://btrfs.readthedocs.io/en/latest/Swapfile.html#hibernation
+- Hibernation on a LUKS Encrypted btrfs https://svw.au/guides/archbtw/hibernate-luks-btrfs-arch/
+- 
