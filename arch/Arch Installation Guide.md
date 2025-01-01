@@ -675,21 +675,118 @@ GRUB_GFXMODE=1024x768x32,800x600x32,auto
 
 # enable saving the selected entry
 GRUB_SAVEDEFAULT=true
-
-# disable submenus in boot menu
-GRUB_DISABLE_SUBMENU=y
 ```
 -  Recreate GRUB config
 ```
 $ sudo grub-mkconfig -o /boot/grub/grub.cfg
 ```
-
+4. `/tmp` cleanup
+```
+$ sudo vim /etc/tmpfiles.d/tmp.conf
+```
+- add
+```
+# Cleaning up /tmp directory everytime system boots
+D! /tmp 1777 root root 0
+```
 ## 14. Snapshots
 
-1. Install Snapper and snap-pac
-    **Snapper** is a tool for managing BTRFS snapshots. It can create and restore snapshots, and provides scheduled auto-snapping. **Snap-pac** provides a Pacman hook that uses Snapper to create `pre-` and `post-` BTRFS snapshots triggered by use of the package manager.
+0. Prepare for manual installation, as `yabsnap`  isn't available via `pacman` yet.
 ```
-$ sudo pacman -S snapper snap-pac
+$ sudo pacman -S base-devel git
+$ mkdir Packages
+$ cd Packages
+```
+
+1. Install `yabsnap` (Yet Another Btrfs Snapshotter) using git option
+
+```
+$ git clone https://github.com/hirak99/yabsnap
+$ cd yabsnap
+$ sudo scripts/install.sh
+```
+
+2. Configure `yabsnap`
+
+- Create config files for each subvolume
+```
+$ sudo yabsnap create-config root
+$ sudo yabsnap create-config home
+$ sudo yabsnap create-config cache
+$ sudo yabsnap create-config log
+```
+
+- Edit create config files
+```
+$ sudo vim /etc/yabsnap/configs/root.conf
+$ sudo vim /etc/yabsnap/configs/home.conf
+$ sudo vim /etc/yabsnap/configs/cache.conf
+$ sudo vim /etc/yabsnap/configs/log.conf
+```
+Example:  https://github.com/hirak99/yabsnap?tab=readme-ov-file#config-file
+
+- Add subvolumes mount points as `source`
+
+`root.conf`:
+```
+source = /
+keep_user = 5
+```
+
+`home.conf`:
+```
+source = /home
+keep_user = 5
+```
+
+`cache.conf`:
+```
+source = /var/cache
+keep_user = 5
+```
+
+`log.conf`:
+```
+source = /var/log
+keep_user = 5
+```
+
+4. Check setup
+```
+$ yabsnap list
+```
+
+6. Enable service (auto snapshots)
+```
+$ sudo systemctl enable --now yabsnap.timer
+```
+
+7. Test snapshot
+```
+$ sudo yabsnap create --comment "Initial test snapshot, after configuring yabsnap"
+$ yabsnap list
+```
+
+8. Integrate snapshots with GRUB via `grub-btrfs`
+
+- install package
+```
+$ sudo pacman -S grub-btrfs
+```
+
+- (Optional) if `grub.cfg` location is different from default (`/boot/grub`), set the location of the directory containing the `grub.cfg` file in `/etc/default/grub-btrfs/config`
+```
+$ sudo vim /etc/default/grub-btrfs/config
+```
+Update:
+```
+GRUB_BTRFS_GRUB_DIRNAME="/boot/grub"
+```
+
+- Enable service (turn on auto update)
+```
+$ sudo systemctl start grub-btrfsd
+$ sudo systemctl enable grub-btrfsd
 ```
 
 ## References
@@ -730,9 +827,22 @@ $ sudo pacman -S snapper snap-pac
 - BTFS | Swapfile https://btrfs.readthedocs.io/en/latest/Swapfile.html
 - BTRFS | Swapfile for hibernation https://btrfs.readthedocs.io/en/latest/Swapfile.html#hibernation
 - Hibernation on a LUKS Encrypted btrfs https://svw.au/guides/archbtw/hibernate-luks-btrfs-arch/
+- Meaning of “watchdog did not stop!” Message at Shutdown in Linux https://www.baeldung.com/linux/watchdog-message-explained
 - GRUB | Multiple entries https://wiki.archlinux.org/title/GRUB/Tips_and_tricks#Multiple_entries
 - GRUB | Text size problem https://community.frame.work/t/solved-grub-text-size-problem/20036/9
+- Arch | Silent boot https://wiki.archlinux.org/title/Silent_boot
+- Arch | Plymouth https://wiki.archlinux.org/title/Plymouth
+- Enabling hibernation on Arch Linux with LUKS LVM encryption using a swap partition https://gist.github.com/Iwwww/008ef082a52cc509d186889118412aa6
+- Arch | BTRFS `/tmp` clean https://github.com/Zelrin/arch-btrfs-install-guide?tab=readme-ov-file#tmp-cleanup
 - BTRFS snapshots and system rollbacks on Arch Linux https://www.dwarmstrong.org/btrfs-snapshots-rollbacks/
 - arch-btrfs-install-guide https://github.com/Zelrin/arch-btrfs-install-guide
 - An Arch Linux Installation on a Btrfs Filesystem with Snapper for System Snapshots and Rollbacks https://www.ordinatechnic.com/distribution-specific-guides/Arch/an-arch-linux-installation-on-a-btrfs-filesystem-with-snapper-for-system-snapshots-and-rollbacks
+- Snapper/BTRFS layout for easily restoring files, or entire system https://bbs.archlinux.org/viewtopic.php?id=194491
+- Arch | Snapper https://wiki.archlinux.org/title/Snapper
+- BTRFS | Managing snapshots https://archive.kernel.org/oldwiki/btrfs.wiki.kernel.org/index.php/SysadminGuide.html#Managing_snapshots
+- decrypt_keyctl - multi device decryption https://github.com/gebi/keyctl_keyscript
+- Snapper and grub-btrfs in Arch Linux https://www.lorenzobettini.it/2023/03/snapper-and-grub-btrfs-in-arch-linux/
+- `yabsnap` - Yet Another Btrfs Snapshotter https://github.com/hirak99/yabsnap
+- yabsnap: btrfs snapshot manager for Arch https://www.reddit.com/r/archlinux/comments/y10kyx/yabsnap_btrfs_snapshot_manager_for_arch/
+- grub-btrfs https://github.com/Antynea/grub-btrfs
 - 
