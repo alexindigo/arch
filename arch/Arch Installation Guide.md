@@ -18,6 +18,7 @@
 - [12. Linux LTS kernel](#12-linux-lts-kernel)
 - [13. Tuning](#13-tuning)
 - [14. Snapshots](#14-snapshots)
+- [15. Next steps](#15-next-steps)
 - [References](#references)
 
 ## Key Points
@@ -788,6 +789,15 @@ GRUB_BTRFS_GRUB_DIRNAME="/boot/grub"
 $ sudo systemctl start grub-btrfsd
 $ sudo systemctl enable grub-btrfsd
 ```
+
+> TODO: Wait for grub-btrfs update to support `yabsnap`
+
+## 15. Next steps
+
+	Consider following steps:
+1. [Post-install Tuning](Post-install%20Tuning.md)
+2. [Hyprland Installation](Hyprland%20Installation.md)
+3. [GRUB boot from USB](GRUB%20boot%20from%20USB.md)
 
 ## References
 - Arch Linux Installation guide https://wiki.archlinux.org/title/Installation_guide
