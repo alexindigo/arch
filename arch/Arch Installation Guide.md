@@ -774,7 +774,7 @@ $ yabsnap list
 $ sudo pacman -S grub-btrfs
 ```
 
-- (Optional) if `grub.cfg` location is different from default (`/boot/grub`), set the location of the directory containing the `grub.cfg` file in `/etc/default/grub-btrfs/config`
+- Update  `/etc/default/grub-btrfs/config` to enable `yabsnap` specific values:
 ```
 $ sudo vim /etc/default/grub-btrfs/config
 ```
