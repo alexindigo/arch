@@ -1,5 +1,7 @@
 # GRUB boot from USB
 
+> This guide assumes you followed [Arch Installation Guide](Arch%20Installation%20Guide.md) steps.
+
 ```
 Add this to the file /etc/grub.d/40_custom, replacing UUID=XXXX-YYYY with the partition UUID (get UUID with command blkid)
 
