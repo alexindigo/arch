@@ -1,5 +1,15 @@
 # Post-install Tuning
 
+- [AUR (Arch User Repository)](#aur-arch-user-repository)
+- [Power management](#power-management)
+	- [TODO:](#todo)
+- [Sound](#sound)
+- [Media buttons](#media-buttons)
+- [Notes on Smarglefarf](#notes-on%C2%A0smarglefarf)
+- [Fingerprint reader](#fingerprint-reader)
+- [Ambient light sensor](#ambient-light-sensor)
+- [References](#references)
+
 > This guide assumes you followed [Arch Installation Guide](Arch%20Installation%20Guide.md) steps.
 
 ## AUR (Arch User Repository)
@@ -43,29 +53,22 @@ MAKEFLAGS="--jobs=$(nproc)"
 
 ## Power management
 
-1. Install `acpid`
-```
-$ sudo pacman -S acpid
-$ sudo systemctl enable acpid
-$ sudo systemctl start acpid
-```
-
-2. Install Laptop Mode Tools
+1. Install Laptop Mode Tools
 ```
 $ cd ~/Packages
 $ git clone ssh://aur@aur.archlinux.org/laptop-mode-tools.git
 $ cd laptop-mode-tools
 $ less PKGBUILD
-$ makepkg --clean
+$ makepkg --syncdeps --rmdeps --clean
 $ makepkg --install
 ```
 
-3. (Optional) vote for the package if you find it useful
+2. (Optional) vote for the package if you find it useful
 ```
 $ ssh aur@aur.archlinux.org vote laptop-mode-tools
 ```
 
-4. Update `laptop-mode-tools` configs
+3. Update `laptop-mode-tools` configs
 ```
 $ sudo vim /etc/laptop-mode/laptop-mode.conf
 $ ls -la /etc/laptop-mode/conf.d/
@@ -77,7 +80,7 @@ $ grep -r '^\(CONTROL\|ENABLE\)_' /etc/laptop-mode/laptop-mode.conf
 $ grep -r '^\(CONTROL\|ENABLE\)_' /etc/laptop-mode/conf.d
 ```
 
-5. Adjust ACPI events
+4. Adjust ACPI events
 ```
 $ sudo vim /etc/systemd/logind.conf
 ```
@@ -101,9 +104,208 @@ HandleLidSwitchExternalPower=sleep
 $ sudo systemctl reload systemd-login
 ```
 
-## TODO:
+### TODO:
 - lock on hibernate and suspend
 - lock on "display off" (laptop tools)
+- TLP vs Laptop Mode Tools 
+
+## Sound
+
+As per [Arch | Framework 13](https://wiki.archlinux.org/title/Framework_Laptop_13_(Intel_Core_Ultra_Series_1)) wiki, speakers need adjustments.
+
+Recommended way is to install [EasyEffects](https://wiki.archlinux.org/title/EasyEffects "EasyEffects") and use the [official preset](https://github.com/FrameworkComputer/linux-docs/tree/main/easy-effects).
+
+And we'll do it by help of PipeWire.
+> [PipeWire](https://wiki.archlinux.org/title/PipeWire) is a new low-level multimedia framework. It aims to offer capture and playback for both audio and video with minimal latency and support for PulseAudio, JACK, ALSA and GStreamer-based applications.
+
+1. Install pipewire as audio server, and clients for application integrations
+```
+$ sudo pacman -S pipewire pipewire-audio pipewire-alsa pipewire-pulse wireplumber alsa-utils
+```
+
+** - `alsa-utils` is needed to have `speaker-test` available.
+
+2. Reboot
+```
+$ sudo systemctl reboot
+```
+
+3. Test
+```
+$ pactl info | grep Pipe
+Server Name: PulseAudio (on PipeWire 0.3.48)
+$ speaker-test -c 2 -t wav -l 1
+```
+
+TODO: 
+- EasyEffects Framework DSP profiles https://github.com/cab404/framework-dsp
+
+## Media buttons
+
+1. Install `swhkd` AUR package
+```
+$ cd ~/Packages
+$ git clone ssh://aur@aur.archlinux.org/swhkd-git.git
+$ cd swhkd-git
+$ less PKGBUILD
+
+# Testing with proposed change
+$ vim PKGBUILD
+source=("git+$url.git#commit=f88776786b7cc48e26e70efc6e5cca562be15bcb"
+
+$ makepkg --syncdeps --rmdeps --clean --install
+```
+
+** - may need to edit `PKGBUILD` file, re: https://github.com/waycrate/swhkd/issues/281#issuecomment-2574348182 and https://github.com/waycrate/swhkd/pull/285 and https://github.com/waycrate/swhkd/pull/254
+
+2. (Optional) vote for the package if you find it useful
+```
+$ ssh aur@aur.archlinux.org vote swhkd-git
+```
+
+3. Make `swhkd` binary a setuid binary
+```
+$ sudo chown root:root /usr/bin/swhkd
+$ sudo chmod u+s /usr/bin/swhkd
+```
+
+4. Update config files
+
+- Setup main config file:
+```
+$ sudo vim /etc/swhkd/swhkdrc
+
+# Raise volume
+XF86AudioRaiseVolume
+  pactl set-sink-volume @DEFAULT_SINK@ +5%
+ 
+# Lower volume
+XF86AudioLowerVolume
+  pactl set-sink-volume @DEFAULT_SINK@ -5%
+ 
+# Mute
+XF86AudioMute
+  pactl set-sink-mute @DEFAULT_SINK@ toggle
+
+```
+
+- Add user specific config
+```
+$ mkdir -p ~/.config/swhkd/
+$ vim ~/.config/swhkd/swhkdrc
+
+include /etc/swhkd/swhkdrc
+```
+** - Example config https://github.com/waycrate/swhkd/blob/main/docs/swhkd.5.scd
+
+5. Add `systemd` auto start
+
+- Add start script ([from `swhkd/init/systemd`](https://github.com/waycrate/swhkd/blob/main/contrib/init/systemd/hotkeys.sh)):
+```
+$ sudo vim /usr/local/bin/swhkd-service.sh
+
+#!/usr/bin/env bash
+
+killall swhks
+
+swhks & swhkd
+```
+
+- Make it executable
+```
+$ sudo chmod +x /usr/local/bin/swhkd-service.sh
+```
+
+- Add systemd user service file, add file path above to `ExecStart` option
+```
+$ sudo vim /usr/lib/systemd/user/swhkd.service
+
+[Unit]
+Description=swhkd hotkey daemon
+BindsTo=default.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/swhkd-service.sh
+
+[Install]
+WantedBy=default.target
+```
+
+- Enable new service
+```
+$ systemctl --user enable swhkd.service
+```
+
+
+TODO:
+
+```
+# Play
+XF86AudioPlay
+    playerctl play-pause
+ 
+#Next
+XF86AudioNext
+    playerctl next
+ 
+#previous
+XF86AudioPrev
+    playerctl previous
+ 
+#Stop
+XF86AudioStop
+    playerctl stop
+```
+
+%%
+button/mute MUTE 00000080 00000000 K
+button/volumedown VOLDN 00000080 00000000 K
+button/volumeup VOLUP 00000080 00000000 K
+cd/prev CDPREV 00000080 00000000 K
+cd/play CDPLAY 00000080 00000000 K
+cd/next CDNEXT 00000080 00000000 K
+video/brightnessdown BRTDN 00000087 00000000 K
+video/brightnessup BRTUP 00000086 00000000 K
+%%
+
+1. Create button/* event files
+```
+$ for action in {mute,volumedown,volumeup}; do cat <<EOF | sudo tee /etc/acpi/events/button-$action ; done
+event=button/$action
+action=/etc/acpi/actions/button-$action.sh
+EOF
+```
+
+1. Create video/* event files
+```
+$ for action in {brightnessdown,brightnessup}; do cat <<EOF | sudo tee /etc/acpi/events/video-$action ; done
+event=video/$action
+action=/etc/acpi/actions/video-$action.sh
+EOF
+```
+
+TODO:
+- https://community.frame.work/t/disabling-flight-mode-airplane-mode-function-key-f10-is-it-possible/30747/6
+- 
+
+## Notes on Smarglefarf
+
+From: http://welz.org.za/notes
+
+The smarglefarf can be used in many ways. The smarglefarf is useful for many things. To get the optimal use of smarglefarf it is essential to overstand it property.
+
+Here it is belpful to realise that the smarglefarf is made up. Specifically it is made up out of recombobulated smargle which has been aged for up to green years. Once ripe, the smargle is stirred in with twice its quantity of farf. For best results only use oldfangled farf. The newfangled stuff simply isn't available in North Antarticum. Stir in well, then well in stairs. Wait for up to four hectopascallets, tie them down well.
+
+This ends my smarglefarf video. Please be sure to smash the like button, like with a hammer. Then tear it out and melt it down into more vape cartridge housings. Those you can mash too, with a bit of milk and just the right amount of salt. Rock salt works best. Some say rocks-in-the-head salt doesn't give the same effect, but the convenience of it can't be oversated.
+
+## Fingerprint reader
+
+Install [fprint](https://wiki.archlinux.org/title/Fprint "Fprint") to enable fingerprint authentication.
+
+## Ambient light sensor
+
+Install [iio-sensor-proxy](https://archlinux.org/packages/?name=iio-sensor-proxy) to enable automatic brightness in Gnome.
 
 ## References
 
@@ -116,5 +318,26 @@ $ sudo systemctl reload systemd-login
 - Arch | AUR | Authentication https://wiki.archlinux.org/title/AUR_submission_guidelines#Authentication
 - Laptop Mode Tools wiki https://github.com/rickysarraf/laptop-mode-tools/wiki
 - `logind.conf.5` https://man.archlinux.org/man/logind.conf.5
-- 
+- How to handle ACPI events on Linux https://linuxconfig.org/how-to-handle-acpi-events-on-linux
+- Arch | Framework Laptop 13 (Intel Core Ultra Series 1) https://wiki.archlinux.org/title/Framework_Laptop_13_(Intel_Core_Ultra_Series_1)
+- Easy Effects for FW 16 and 13 https://github.com/FrameworkComputer/linux-docs/tree/main/easy-effects
+- Arch | Framework Laptop 16 | Audio https://wiki.archlinux.org/title/Framework_Laptop_16#Audio
+- Arch | Pipewire  https://wiki.archlinux.org/title/PipeWire
+- Easy Effects | Github https://github.com/wwmm/easyeffects
+- Pipewire https://pipewire.org/
+- A(rch) to Z(ram): Install Arch Linux with (almost) full disk encryption and BTRFS https://www.dwarmstrong.org/archlinux-install/
+- EasyEffects Framework DSP profiles https://github.com/cab404/framework-dsp
+- Arch | `acpid` | Enabling volume control https://wiki.archlinux.org/title/Acpid#Enabling_volume_control
+- FW13 | Fingerprint Checker https://github.com/FrameworkComputer/linux-docs/tree/main/Fingerprint-Checker
+- ACPI scripts https://github.com/michaelpq/home/tree/00e4db2f1d6f315c333f33110a3f657d0b241762/.examples/acpi
+- Arch | Pulse Audio | Keyboard volume control https://wiki.archlinux.org/title/PulseAudio#Keyboard_volume_control
+- Arch | Advanced Linux Sound Architecture | Keyboard volume control | https://wiki.archlinux.org/title/Advanced_Linux_Sound_Architecture#Keyboard_volume_control
+- Arch | Linux console/Keyboard configuration https://wiki.archlinux.org/title/Linux_console/Keyboard_configuration#Creating_a_custom_keymap
+- Arch | Keyboard input https://wiki.archlinux.org/title/Keyboard_input
+- Arch | Input remap utilities https://wiki.archlinux.org/title/Input_remap_utilities
+- How I Use SWHKD in My Workflow https://lavafroth.is-a.dev/post/how-i-use-swhkd-in-my-workflow/
+- Sxhkd clone for Wayland (works on TTY and X11 too) https://git.sr.ht/~shinyzenith/swhkd
+- swhkd | systemd Instructions https://github.com/waycrate/swhkd/tree/main/contrib/init/systemd
+- Disabling Flight Mode / Airplane Mode Function Key F10 - is it possible? https://community.frame.work/t/disabling-flight-mode-airplane-mode-function-key-f10-is-it-possible/30747/6
+- Running Arch Linux on the Framework Laptop 13 https://rubin55.org/blog/running-arch-linux-on-the-framework-laptop-13/
 - 

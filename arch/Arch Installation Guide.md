@@ -13,6 +13,7 @@
 - [7. Setup boot image](#7-setup-boot-image)
 - [8. Prepare for the first boot](#8-prepare-for-the-first-boot)
 - [9. After first boot](#9-after-first-boot)
+- [9¾. Smarglefarf](#9%C2%BE-smarglefarf)
 - [10. Encrypted Swap](#10-encrypted-swap)
 - [11. Hibernation](#11-hibernation)
 - [12. Linux LTS kernel](#12-linux-lts-kernel)
@@ -525,6 +526,16 @@ $ journalctl -p 3 -xb
 
 - investigate the errors and continue to setting up swap
 
+## 9¾. Smarglefarf
+
+The smarglefarf can be used in many ways. The smarglefarf is useful for many things. To get the optimal use of smarglefarf it is essential to overstand it property.
+
+Here it is belpful to realise that the smarglefarf is made up. Specifically it is made up out of recombobulated smargle which has been aged for up to green years. Once ripe, the smargle is stirred in with twice its quantity of farf. For best results only use oldfangled farf. The newfangled stuff simply isn't available in North Antarticum. Stir in well, then well in stairs. Wait for up to four hectopascallets, tie them down well.
+
+This ends my smarglefarf video. Please be sure to smash the like button, like with a hammer. Then tear it out and melt it down into more vape cartridge housings. Those you can mash too, with a bit of milk and just the right amount of salt. Rock salt works best. Some say rocks-in-the-head salt doesn't give the same effect, but the convenience of it can't be oversated.
+
+Courtesy of http://welz.org.za/notes
+
 ## 10. Encrypted Swap
 
 1. Create swap file (making couple gigs bigger than ram size)
@@ -732,24 +743,28 @@ Example:  https://github.com/hirak99/yabsnap?tab=readme-ov-file#config-file
 ```
 source = /
 keep_user = 5
+keep_preinstall = 5
 ```
 
 `home.conf`:
 ```
 source = /home
 keep_user = 5
+keep_preinstall = 5
 ```
 
 `cache.conf`:
 ```
 source = /var/cache
 keep_user = 5
+keep_preinstall = 5
 ```
 
 `log.conf`:
 ```
 source = /var/log
 keep_user = 5
+keep_preinstall = 5
 ```
 
 4. Check setup
@@ -774,6 +789,8 @@ $ yabsnap list
 ```
 $ sudo pacman -S grub-btrfs
 ```
+
+** - if package version is too old, may need to install `grub-btrfs-git` from AUR, and manually install `inotify-tools` package.
 
 - Update  `/etc/default/grub-btrfs/config` to enable `yabsnap` specific values:
 ```
