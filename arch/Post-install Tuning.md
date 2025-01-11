@@ -4,7 +4,11 @@
 - [Power management](#power-management)
 	- [TODO:](#todo)
 - [Sound](#sound)
+	- [TODO:](#todo)
 - [Media buttons](#media-buttons)
+- [Brightness control](#brightness-control)
+	- [TODO:](#todo)
+	- [TODO:](#todo)
 - [Notes on Smarglefarf](#notes-on%C2%A0smarglefarf)
 - [Fingerprint reader](#fingerprint-reader)
 - [Ambient light sensor](#ambient-light-sensor)
@@ -137,7 +141,7 @@ Server Name: PulseAudio (on PipeWire 0.3.48)
 $ speaker-test -c 2 -t wav -l 1
 ```
 
-TODO: 
+### TODO:
 - EasyEffects Framework DSP profiles https://github.com/cab404/framework-dsp
 
 ## Media buttons
@@ -237,10 +241,46 @@ WantedBy=default.target
 $ systemctl --user enable swhkd.service
 ```
 
+## Brightness control
 
-TODO:
+1. Install `brightnessctl` package
+```
+$ sudo pacman -S brightnessctl
+```
+
+2. Make `brightnessctl` binary a setuid binary
+```
+$ sudo chown root:root /usr/bin/brightnessctl
+$ sudo chmod u+s /usr/bin/brightnessctl
+```
+
+3. Test brightness changes
+```
+$ brightnessctl set +10%
+```
+
+4. Add brightness media buttons control to `swhkd` config
+```
+$ sudo vim /etc/swhkd/swhkdrc
+
+# Increase brightness
+XF86MonBrightnessUp
+	brightnessctl set +5%
+
+# Decrease brightness
+XF86MonBrightnessDown
+	brightnessctl set 5%-
+```
+
+5. Restart swhkd service
+```
+$ systemctl --user restart swhkd.service
+```
+
+### TODO:
 
 ```
+
 # Play
 XF86AudioPlay
     playerctl play-pause
@@ -285,7 +325,7 @@ action=/etc/acpi/actions/video-$action.sh
 EOF
 ```
 
-TODO:
+### TODO:
 - https://community.frame.work/t/disabling-flight-mode-airplane-mode-function-key-f10-is-it-possible/30747/6
 - 
 
@@ -340,4 +380,5 @@ Install [iio-sensor-proxy](https://archlinux.org/packages/?name=iio-sensor-prox
 - swhkd | systemd Instructions https://github.com/waycrate/swhkd/tree/main/contrib/init/systemd
 - Disabling Flight Mode / Airplane Mode Function Key F10 - is it possible? https://community.frame.work/t/disabling-flight-mode-airplane-mode-function-key-f10-is-it-possible/30747/6
 - Running Arch Linux on the Framework Laptop 13 https://rubin55.org/blog/running-arch-linux-on-the-framework-laptop-13/
+- `brightnessctl` https://github.com/Hummer12007/brightnessctl
 - 
