@@ -7,7 +7,7 @@
 	- [TODO:](#todo)
 - [Media buttons](#media-buttons)
 - [Brightness control](#brightness-control)
-	- [TODO:](#todo)
+- [Remap "Airplane" mode button](#remap-airplane-mode-button)
 	- [TODO:](#todo)
 - [Notes on Smarglefarf](#notes-on%C2%A0smarglefarf)
 - [Fingerprint reader](#fingerprint-reader)
@@ -277,6 +277,107 @@ XF86MonBrightnessDown
 $ systemctl --user restart swhkd.service
 ```
 
+## Remap "Airplane" mode button
+_Framework laptop specific_
+
+0. (Optional) If need to test and get event codes:
+- install `evtest`
+```
+$ sudo pacman -S evtest
+```
+- Find event number by running `evtest` without arguments
+```
+$ sudo evtest
+
+/dev/input/event4:	FRMW0004:00 32AC:0006 Wireless Radio Control
+
+Input driver version is 1.0.1
+Input device ID: bus 0x18 vendor 0x32ac product 0x6 version 0x100
+Input device name: "FRMW0004:00 32AC:0006 Wireless Radio Control"
+Supported events:
+  Event type 0 (EV_SYN)
+  Event type 1 (EV_KEY)
+    Event code 247 (KEY_RFKILL)
+  Event type 4 (EV_MSC)
+    Event code 4 (MSC_SCAN)
+```
+- Search for "Wireless", and enter the corresponding number (maybe `4`).
+- Press Airplane button, and see codes:
+```
+Event: time 1736663942.533081, type 4 (EV_MSC), code 4 (MSC_SCAN), value 100c6
+Event: time 1736663942.533081, type 1 (EV_KEY), code 247 (KEY_RFKILL), value 1
+Event: time 1736663942.533081, -------------- SYN_REPORT ------------
+Event: time 1736663942.533087, type 1 (EV_KEY), code 247 (KEY_RFKILL), value 0
+Event: time 1736663942.533087, -------------- SYN_REPORT ------------
+```
+
+** – TLDR:  "MSC_SCAN / 100c6" mapped to "code 247 / KEY_RFKILL"
+
+1. Add hwdb file for airplane mode button
+```
+$ sudo vim /etc/udev/hwdb.d/20-kbd-custom-keys.hwdb
+```
+
+```
+## Input device ID: bus 0x18 vendor 0x32ac product 0x6 version 0x100
+## Input device name: "FRMW0004:00 32AC:0006 Wireless Radio Control"
+# If this snippet doesnt work for you, follow the steps below to create a new rule
+# 1. Get the above information with `evtest` command and go through all /dev/input/eventX devices until you find yours
+# 2. Press the airplane mode key and look for what event is fired. look for the value of MSC_SCAN
+# E.g. "Event: time 1736663942.533081, type 4 (EV_MSC), code 4 (MSC_SCAN), value 100c6"
+# 3. Fill out below with the values discovered from evtest, on the "evdev:input" line, make sure the values are all caps and 4 characters long like in the example below
+# E.g.
+# "FRMW0004:00 32AC:0006 Wireless Radio Control"
+# "Input device ID: bus 0x18 vendor 0x32ac product 0x6 version 0x100"
+# evdev:input:b{bus}v{vendor}p{product}
+evdev:input:b0018v32ACp0006*
+  KEYBOARD_KEY_100c6=f14
+```
+
+^ – maps "airplane mode" key to "f14" so we can map it to some extra logic in the future
+
+2. Update the database
+```
+$ sudo systemd-hwdb update
+```
+
+3. Check updated record
+```
+$ systemd-hwdb query 'evdev:input:b0018v32ACp0006*'
+
+KEYBOARD_KEY_100c6=f14
+```
+
+4. Re-register keyboard
+** - provide corresponding event number detected above
+```
+$ sudo udevadm trigger /dev/input/event4
+```
+
+5. Check with evtest
+```
+$ sudo evtest /dev/input/event4
+
+Input driver version is 1.0.1
+Input device ID: bus 0x18 vendor 0x32ac product 0x6 version 0x100
+Input device name: "FRMW0004:00 32AC:0006 Wireless Radio Control"
+Supported events:
+  Event type 0 (EV_SYN)
+  Event type 1 (EV_KEY)
+    Event code 184 (KEY_F14)
+  Event type 4 (EV_MSC)
+    Event code 4 (MSC_SCAN)
+Properties:
+Testing ... (interrupt to exit)
+
+
+Event: time 1736665674.552566, type 4 (EV_MSC), code 4 (MSC_SCAN), value 100c6
+Event: time 1736665674.552566, type 1 (EV_KEY), code 184 (KEY_F14), value 1
+Event: time 1736665674.552566, -------------- SYN_REPORT ------------
+Event: time 1736665674.552569, type 1 (EV_KEY), code 184 (KEY_F14), value 0
+Event: time 1736665674.552569, -------------- SYN_REPORT ------------
+```
+
 ### TODO:
 
 ```
@@ -297,37 +398,6 @@ XF86AudioPrev
 XF86AudioStop
     playerctl stop
 ```
-
-%%
-button/mute MUTE 00000080 00000000 K
-button/volumedown VOLDN 00000080 00000000 K
-button/volumeup VOLUP 00000080 00000000 K
-cd/prev CDPREV 00000080 00000000 K
-cd/play CDPLAY 00000080 00000000 K
-cd/next CDNEXT 00000080 00000000 K
-video/brightnessdown BRTDN 00000087 00000000 K
-video/brightnessup BRTUP 00000086 00000000 K
-%%
-
-1. Create button/* event files
-```
-$ for action in {mute,volumedown,volumeup}; do cat <<EOF | sudo tee /etc/acpi/events/button-$action ; done
-event=button/$action
-action=/etc/acpi/actions/button-$action.sh
-EOF
-```
-
-1. Create video/* event files
-```
-$ for action in {brightnessdown,brightnessup}; do cat <<EOF | sudo tee /etc/acpi/events/video-$action ; done
-event=video/$action
-action=/etc/acpi/actions/video-$action.sh
-EOF
-```
-
-### TODO:
-- https://community.frame.work/t/disabling-flight-mode-airplane-mode-function-key-f10-is-it-possible/30747/6
-- 
 
 ## Notes on Smarglefarf
 
@@ -381,4 +451,10 @@ Install [iio-sensor-proxy](https://archlinux.org/packages/?name=iio-sensor-prox
 - Disabling Flight Mode / Airplane Mode Function Key F10 - is it possible? https://community.frame.work/t/disabling-flight-mode-airplane-mode-function-key-f10-is-it-possible/30747/6
 - Running Arch Linux on the Framework Laptop 13 https://rubin55.org/blog/running-arch-linux-on-the-framework-laptop-13/
 - `brightnessctl` https://github.com/Hummer12007/brightnessctl
+- Disabling Flight Mode / Airplane Mode Function Key F10 - is it possible? https://community.frame.work/t/disabling-flight-mode-airplane-mode-function-key-f10-is-it-possible/30747/13
+- Can't remap keys on a Microsoft Keyboard with HWDB https://askubuntu.com/questions/1301821/cant-remap-keys-on-a-microsoft-keyboard-with-hwdb
+- hwdb - Hardware Database https://man.archlinux.org/man/core/systemd/hwdb.7.en
+- How to use the command 'systemd-hwdb' (with examples) https://commandmasters.com/commands/systemd-hwdb-linux/
+- Map scancodes to keycodes https://wiki.archlinux.org/title/Map_scancodes_to_keycodes
+- Rebinding Keyboard Keys @ altlinux.org (In russian, but all the command and config examples speak for themselves) https://www.altlinux.org/%D0%9F%D0%B5%D1%80%D0%B5%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5_%D0%BA%D0%BB%D0%B0%D0%B2%D0%B8%D1%88_%D0%BA%D0%BB%D0%B0%D0%B2%D0%B8%D0%B0%D1%82%D1%83%D1%80%D1%8B
 - 
