@@ -8,11 +8,11 @@
 - [Media buttons](#media-buttons)
 - [Brightness control](#brightness-control)
 - [Remap "Airplane" mode button](#remap-airplane-mode-button)
-	- [TODO:](#todo)
 - [Notes on Smarglefarf](#notes-on%C2%A0smarglefarf)
-- [Fingerprint reader](#fingerprint-reader)
-- [Ambient light sensor](#ambient-light-sensor)
+- [Pacman cache cleaning](#pacman-cache-cleaning)
+- [Keyboard LEDs](#keyboard-leds)
 - [References](#references)
+
 
 > This guide assumes you followed [Arch Installation Guide](Arch%20Installation%20Guide.md) steps.
 
@@ -378,27 +378,6 @@ Event: time 1736665674.552569, type 1 (EV_KEY), code 184 (KEY_F14), value 0
 Event: time 1736665674.552569, -------------- SYN_REPORT ------------
 ```
 
-### TODO:
-
-```
-
-# Play
-XF86AudioPlay
-    playerctl play-pause
- 
-#Next
-XF86AudioNext
-    playerctl next
- 
-#previous
-XF86AudioPrev
-    playerctl previous
- 
-#Stop
-XF86AudioStop
-    playerctl stop
-```
-
 ## Notes on Smarglefarf
 
 From: http://welz.org.za/notes
@@ -409,13 +388,46 @@ Here it is belpful to realise that the smarglefarf is made up. Specifically it i
 
 This ends my smarglefarf video. Please be sure to smash the like button, like with a hammer. Then tear it out and melt it down into more vape cartridge housings. Those you can mash too, with a bit of milk and just the right amount of salt. Rock salt works best. Some say rocks-in-the-head salt doesn't give the same effect, but the convenience of it can't be oversated.
 
-## Fingerprint reader
+## Pacman cache cleaning
 
-Install [fprint](https://wiki.archlinux.org/title/Fprint "Fprint") to enable fingerprint authentication.
+To automatically clean up pacman's cache on weekly basis.
 
-## Ambient light sensor
+1. Install `pacman-contrib` package
+```
+$ sudo pacman -S pacman-contrib
+```
 
-Install [iio-sensor-proxy](https://archlinux.org/packages/?name=iio-sensor-proxy) to enable automatic brightness in Gnome.
+2. Manually deletes all cached versions of installed and uninstalled packages, except for the most recent three:
+```
+$ sudo paccache -r
+```
+
+3. Enable and start `paccache.timer` service
+```
+$ sudo systemctl enable paccache.timer
+$ sudo systemctl start paccache.timer
+```
+
+4. Check status
+```
+$ systemctl status paccache.timer
+```
+
+## Keyboard LEDs
+
+1. Install kmod package for framework laptops
+```
+$ cd ~/Packages
+$ git clone ssh://aur@aur.archlinux.org/framework-laptop-kmod-dkms-git.git
+
+$ cd framework-laptop-kmod-dkms-git
+$ less PKGBUILD
+
+$ makepkg --syncdeps --rmdeps --clean --install
+```
+
+TODO: Capslock LED isn't working https://community.frame.work/t/framework-13-capslock-led-doesnt-work/63225
+
 
 ## References
 
@@ -457,4 +469,6 @@ Install [iio-sensor-proxy](https://archlinux.org/packages/?name=iio-sensor-prox
 - How to use the command 'systemd-hwdb' (with examples) https://commandmasters.com/commands/systemd-hwdb-linux/
 - Map scancodes to keycodes https://wiki.archlinux.org/title/Map_scancodes_to_keycodes
 - Rebinding Keyboard Keys @ altlinux.org (In russian, but all the command and config examples speak for themselves) https://www.altlinux.org/%D0%9F%D0%B5%D1%80%D0%B5%D0%BD%D0%B0%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5_%D0%BA%D0%BB%D0%B0%D0%B2%D0%B8%D1%88_%D0%BA%D0%BB%D0%B0%D0%B2%D0%B8%D0%B0%D1%82%D1%83%D1%80%D1%8B
+- Arch | Cleaning_the_package_cache https://wiki.archlinux.org/title/Pacman#Cleaning_the_package_cache
+- A kernel module that exposes the Framework Laptop (13, 16)'s battery charge limit and LEDs to userspace https://github.com/DHowett/framework-laptop-kmod
 - 
